@@ -279,8 +279,7 @@ onUnmounted(() => document.removeEventListener('keydown', handleKeydown))
       <!-- Placeholder card -->
       <div
         v-if="!isFiltering"
-        v-animate
-        class="flex items-center justify-center border border-dashed border-border-default p-6 text-text-dim animate-pulse-border animate-delay-6"
+        class="flex items-center justify-center border border-dashed border-border-default p-6 text-text-dim animate-pulse-border"
       >
         <span class="text-sm font-display tracking-wide">Trang của bạn sẽ ở đây...</span>
       </div>
