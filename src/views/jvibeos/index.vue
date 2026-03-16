@@ -2,7 +2,8 @@
 import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
 import type { CategoryId } from '@/data/categories'
-import { processPages, type AppItem } from './composables/useApps'
+import type { AppItem } from './composables/useApps'
+import { usePagesLoader } from './composables/usePagesLoader'
 import JViBeOSHeader from './components/JViBeOSHeader.vue'
 import JViBeOSCard from './components/JViBeOSCard.vue'
 import meta from './meta'
@@ -19,8 +20,7 @@ const ViewPage = defineAsyncComponent(() => import('./view/index.vue'))
 const AuthorPage = defineAsyncComponent(() => import('./author/index.vue'))
 const RankingPage = defineAsyncComponent(() => import('./ranking/index.vue'))
 
-const pagesData = ref<AppItem[]>([])
-const isLoading = ref(true)
+const { pagesData } = usePagesLoader()
 const currentPage = ref(1)
 const isMobile = ref(false)
 
@@ -58,20 +58,6 @@ onUnmounted(() => {
 })
 
 const ITEMS_PER_PAGE = computed(() => (isMobile.value ? 10 : 15))
-
-// Fetch pages data
-onMounted(async () => {
-  const pagesResponse = await fetch('/data/pages.json')
-  const rawPages = (await pagesResponse.json()) as {
-    name: string
-    description: string
-    author: string
-    path: string
-    category: CategoryId
-  }[]
-  pagesData.value = processPages(rawPages)
-  isLoading.value = false
-})
 
 const searchQuery = ref('')
 const activeCategory = ref<CategoryId | 'all'>('all')
