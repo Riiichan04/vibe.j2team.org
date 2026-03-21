@@ -4,7 +4,7 @@ import { GAME_WIDTH, GAME_HEIGHT, WEAPON_TYPES, FIRE_RATE } from '../utils/confi
 import { getWeaponStats, arrangeFormation, getRotationForWave } from '../utils/utils'
 import type { GameState } from './useGameState'
 import type { useControls } from './useControls'
-import type { Enemy } from '../utils/types'
+import type { Enemy, SaveSlot } from '../utils/types'
 import { vfx } from '../utils/vfx'
 
 export function useGameActions(state: GameState, controls: ReturnType<typeof useControls>) {
@@ -36,6 +36,9 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
     engine,
     difficulty,
     leaderboard,
+    saves,
+    currentSaveId,
+    showNotification,
   } = state
 
   const { space, mousePressed, mobileKeys, pointerState, Escape } = controls
@@ -93,16 +96,15 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
   )
 
   const addScore = (pts: number) => {
-    // 1. ÁP DỤNG HỆ SỐ ĐIỂM THEO ĐỘ KHÓ (Cập nhật mốc 25k và 50k)
     let mult = 1
     let milestone = 10000
 
     if (difficulty.value === 'normal') {
       mult = 1.5
-      milestone = 25000 // Đã sửa thành 25000
+      milestone = 25000
     } else if (difficulty.value === 'hard') {
       mult = 2
-      milestone = 50000 // Đã sửa thành 50000
+      milestone = 50000
     } else if (difficulty.value === 'hardcore') {
       mult = 3
       milestone = Infinity
@@ -113,7 +115,6 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
     score.value += actualPts
     const newMilestone = Math.floor(score.value / milestone)
 
-    // CỘNG MẠNG NẾU QUA MỐC
     if (newMilestone > oldMilestone && difficulty.value !== 'hardcore') {
       lives.value += newMilestone - oldMilestone
       sfx.powerup()
@@ -129,17 +130,21 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
     if (lives.value <= 0) {
       gameState.value = 'gameover'
 
-      // ---> LƯU LEADERBOARD KHI CHẾT <---
       leaderboard.value.push({
         score: score.value,
         wave: currentWave.value,
         difficulty: difficulty.value,
         date: Date.now(),
       })
-      // Sắp xếp điểm từ cao xuống thấp và lấy top 10
       leaderboard.value.sort((a, b) => b.score - a.score)
       leaderboard.value = leaderboard.value.slice(0, 10)
       localStorage.setItem('chicken_invaders_leaderboard', JSON.stringify(leaderboard.value))
+
+      if (currentSaveId.value) {
+        saves.value = saves.value.filter((s) => s.id !== currentSaveId.value)
+        localStorage.setItem('chicken_invaders_saves', JSON.stringify(saves.value))
+        currentSaveId.value = null
+      }
     }
   }
 
@@ -148,8 +153,8 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
     enemyBullets.value = []
     activeDots.value = []
     bgHue.value = (Math.floor((wave - 1) / 10) * 45) % 360
+    engine.hasSpawnedBoss = false
 
-    // TÍNH TOÁN HP VÀ TỐC ĐỘ BẮN THEO ĐỘ KHÓ
     let hpMult = 1
     let eggRateMult = 1
     if (difficulty.value === 'normal') {
@@ -190,6 +195,7 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
 
     if (wave % 10 === 0) {
       gamePhase.value = 'boss'
+      engine.hasSpawnedBoss = true
       bosses.value = []
       let bType = 0
       if (wave % 100 === 80) bType = 4
@@ -373,12 +379,13 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
       }
     } else if (wave % 10 === 3) {
       if (Math.random() > 0.5) {
+        const radius = activeWidth.value < 800 ? 120 : 160
         for (let i = 0; i < 14; i++)
           generatedMinions.push({
             id: `enemy-${engine.objCounter++}`,
-            x: activeWidth.value / 2 - 20 + 160 * Math.cos((Math.PI * 2 * i) / 14),
+            x: activeWidth.value / 2 - 20 + radius * Math.cos((Math.PI * 2 * i) / 14),
             y: -200 - i * 30,
-            targetY: 240 + 160 * Math.sin((Math.PI * 2 * i) / 14),
+            targetY: 240 + radius * Math.sin((Math.PI * 2 * i) / 14),
             width: 40,
             height: 40,
             hp: minionHp,
@@ -386,10 +393,11 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
             shirtColor: getRandomColor(),
           })
       } else {
+        const spacingX = activeWidth.value < 800 ? 45 : 65
         for (let i = 0; i < 11; i++)
           generatedMinions.push({
             id: `enemy-${engine.objCounter++}`,
-            x: activeWidth.value / 2 - 20 + (i - 5) * 65,
+            x: activeWidth.value / 2 - 20 + (i - 5) * spacingX,
             y: -100 - Math.abs(i - 5) * 60,
             targetY: 80 + Math.abs(i - 5) * 55,
             width: 40,
@@ -401,13 +409,16 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
       }
     } else {
       const rows = Math.min(3 + Math.floor(wave / 4), 5)
-      const cols = Math.min(8 + Math.floor(wave / 3), 12)
+      const maxCols = activeWidth.value < 800 ? 10 : 12
+      const cols = Math.min(8 + Math.floor(wave / 3), maxCols)
+      const spacingX = activeWidth.value < 800 ? 45 : 50
+
       for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
           if (wave % 10 === 7 && row === Math.floor(rows / 2) && col === Math.floor(cols / 2)) {
             generatedMinions.push({
               id: `stash-${engine.objCounter++}`,
-              x: (activeWidth.value - cols * 50) / 2 + col * 50,
+              x: (activeWidth.value - cols * spacingX) / 2 + col * spacingX,
               y: -100 - (rows - row) * 80,
               targetY: 60 + row * 45,
               width: 90,
@@ -426,7 +437,7 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
             continue
           generatedMinions.push({
             id: `enemy-${engine.objCounter++}`,
-            x: (activeWidth.value - cols * 50) / 2 + col * 50,
+            x: (activeWidth.value - cols * spacingX) / 2 + col * spacingX,
             y: -100 - (rows - row) * 80,
             targetY: 60 + row * 45,
             width: 40,
@@ -455,15 +466,17 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
     }, 2000)
   }
 
-  const initGame = () => {
-    currentWave.value = 1
-    weaponType.value = 0
-    weaponLevel.value = 1
-    score.value = 0
+  const initGame = (isLoading = false) => {
+    if (!isLoading) {
+      currentWave.value = 1
+      weaponType.value = 0
+      weaponLevel.value = 1
+      score.value = 0
+      currentSaveId.value = null
 
-    // MẠNG KHỞI ĐẦU THEO ĐỘ KHÓ
-    if (difficulty.value === 'hardcore') lives.value = 1
-    else lives.value = 3
+      if (difficulty.value === 'hardcore') lives.value = 1
+      else lives.value = 3
+    }
 
     bullets.value = []
     enemyBullets.value = []
@@ -474,17 +487,133 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
     bosses.value = []
 
     isRotating.value = false
-    boardRotation.value = getRotationForWave(1)
-    activeWidth.value = GAME_WIDTH
-    activeHeight.value = GAME_HEIGHT
+    boardRotation.value = getRotationForWave(currentWave.value)
+    if (Math.abs(boardRotation.value % 180) === 90) {
+      activeWidth.value = GAME_HEIGHT
+      activeHeight.value = GAME_WIDTH
+    } else {
+      activeWidth.value = GAME_WIDTH
+      activeHeight.value = GAME_HEIGHT
+    }
     player.value.x = activeWidth.value / 2 - 30
     player.value.y = activeHeight.value - 90
     player.value.invulnerable = 0
     engine.isTransitioningWave = false
+    engine.hasSpawnedBoss = false
     waveAnnouncement.value = ''
     hiddenEventWavesLeft.value = 0
 
-    startGame()
+    if (!isLoading) startGame()
+  }
+
+  const saveCurrentGame = () => {
+    const newSave: SaveSlot = {
+      id: currentSaveId.value || Date.now().toString(),
+      name: `Wave ${currentWave.value} - ${difficulty.value.toUpperCase()}`,
+      date: Date.now(),
+      score: score.value,
+      lives: lives.value,
+      currentWave: currentWave.value,
+      weaponType: weaponType.value,
+      weaponLevel: weaponLevel.value,
+      difficulty: difficulty.value,
+    }
+    const idx = saves.value.findIndex((s) => s.id === newSave.id)
+    if (idx !== -1) saves.value[idx] = newSave
+    else {
+      if (saves.value.length >= 10) {
+        saves.value.sort((a, b) => a.date - b.date)
+        saves.value.shift()
+      }
+      saves.value.push(newSave)
+    }
+    currentSaveId.value = newSave.id
+    localStorage.setItem('chicken_invaders_saves', JSON.stringify(saves.value))
+    showNotification('✅ ĐÃ LƯU GAME THÀNH CÔNG!')
+  }
+
+  const loadGame = (save: SaveSlot) => {
+    currentSaveId.value = save.id
+    difficulty.value = save.difficulty
+    currentWave.value = save.currentWave
+    initGame(true)
+    score.value = save.score
+    lives.value = save.lives
+    weaponType.value = save.weaponType
+    weaponLevel.value = save.weaponLevel
+
+    // CÁC BƯỚC NGHỈ VÀ HIỂN THỊ Y HỆT START GAME
+    sfx.init()
+    gameState.value = 'starting'
+    engine.isTransitioningWave = true
+    waveAnnouncement.value = `WAVE ${currentWave.value}`
+    showNotification('✅ ĐÃ TẢI GAME THÀNH CÔNG!')
+
+    setTimeout(() => {
+      gameState.value = 'playing'
+      startWave(currentWave.value)
+      waveAnnouncement.value = ''
+      engine.isTransitioningWave = false
+      engine.lastFireTime = Date.now()
+    }, 2000)
+  }
+
+  const deleteSave = (id: string) => {
+    saves.value = saves.value.filter((s) => s.id !== id)
+    localStorage.setItem('chicken_invaders_saves', JSON.stringify(saves.value))
+    if (currentSaveId.value === id) currentSaveId.value = null
+    showNotification('🗑️ ĐÃ XOÁ BẢN LƯU VĨNH VIỄN!')
+  }
+
+  const exportSaves = () => {
+    const dataStr =
+      'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(saves.value))
+    const downloadAnchorNode = document.createElement('a')
+    downloadAnchorNode.setAttribute('href', dataStr)
+    downloadAnchorNode.setAttribute('download', 'chicken_invaders_saves.json')
+    document.body.appendChild(downloadAnchorNode)
+    downloadAnchorNode.click()
+    downloadAnchorNode.remove()
+  }
+
+  const importSaves = (event: Event) => {
+    const target = event.target as HTMLInputElement
+    const file = target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string
+        const importedSaves = JSON.parse(content) as SaveSlot[]
+
+        if (Array.isArray(importedSaves)) {
+          let merged = [...saves.value]
+
+          importedSaves.forEach((imported) => {
+            if (imported.id && imported.score !== undefined && imported.currentWave !== undefined) {
+              const idx = merged.findIndex((s) => s.id === imported.id)
+              if (idx !== -1) merged[idx] = imported
+              else merged.push(imported)
+            }
+          })
+
+          merged.sort((a, b) => b.date - a.date)
+          merged = merged.slice(0, 10)
+
+          saves.value = merged
+          localStorage.setItem('chicken_invaders_saves', JSON.stringify(saves.value))
+          showNotification('✅ ĐÃ NẠP DỮ LIỆU LƯU TRỮ THÀNH CÔNG!')
+        } else {
+          showNotification('❌ FILE KHÔNG HỢP LỆ!')
+        }
+      } catch {
+        showNotification('❌ LỖI ĐỌC FILE!')
+      }
+
+      target.value = ''
+    }
+    reader.readAsText(file)
   }
 
   const fireBullets = () => {
@@ -503,6 +632,7 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
     let currentFireRate = FIRE_RATE
     if (wType === 0 || wType === 3) currentFireRate = isTap ? 80 : 350
     if (wType === 8) currentFireRate = 800
+    if (wType === 9) currentFireRate = isTap ? 250 : 500
 
     if (Date.now() - engine.lastFireTime < currentFireRate) return
 
@@ -608,11 +738,9 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
 
     sfx.explode()
 
-    // GIẢM TỶ LỆ RỚT VŨ KHÍ TÙY THEO ĐỘ KHÓ
     let dropRate = enemy.isMeteor ? 0.012 : 0.12
-    if (difficulty.value === 'normal')
-      dropRate *= 0.4 // Đã giảm từ 0.6 xuống 0.4
-    else if (difficulty.value === 'hard' || difficulty.value === 'hardcore') dropRate *= 0.2 // Giảm Khó xuống 0.2 cho gắt
+    if (difficulty.value === 'normal') dropRate *= 0.4
+    else if (difficulty.value === 'hard' || difficulty.value === 'hardcore') dropRate *= 0.2
 
     if (enemy.isStash) {
       powerUps.value.push({
@@ -652,6 +780,11 @@ export function useGameActions(state: GameState, controls: ReturnType<typeof use
     initGame,
     fireBullets,
     handleEnemyDeath,
+    saveCurrentGame,
+    loadGame,
+    deleteSave,
+    exportSaves,
+    importSaves,
   }
 }
 

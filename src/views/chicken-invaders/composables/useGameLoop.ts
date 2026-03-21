@@ -7,6 +7,7 @@ import {
   getRotationForWave,
 } from '../utils/utils'
 import { sfx } from '../utils/audio'
+import { vfx } from '../utils/vfx'
 import type { GameState } from './useGameState'
 import type { useControls } from './useControls'
 import type { GameActions } from './useGameActions'
@@ -255,13 +256,15 @@ export function useGameLoop(
         takeDamage()
       } else if (
         egg.y > activeHeight.value ||
-        egg.y < -100 || // Fix Memory Leak khi Boss nổ Nova 360 độ (Trứng bay ngược lên trên)
+        egg.y < -100 ||
         egg.x < -100 ||
         egg.x > activeWidth.value + 100
       ) {
         enemyBullets.value.splice(i, 1)
       }
     }
+
+    const isHorizontal = Math.abs(boardRotation.value % 180) === 90
 
     if (gamePhase.value === 'minions' || gamePhase.value === 'meteors') {
       if (engine.pendingSpawns.length > 0 && gameState.value !== 'starting') {
@@ -359,12 +362,25 @@ export function useGameLoop(
             let hitWall = false
             enemies.value.forEach((enemy) => {
               if (!enemy.isHazard) {
-                enemy.x += engine.waveEnemySpeed * engine.enemyDirection
+                let speed = engine.waveEnemySpeed
+                if (isHorizontal && currentWave.value % 100 === 23) speed *= 1.5
+                enemy.x += speed * engine.enemyDirection
                 if (enemy.x <= 0 || enemy.x + enemy.width >= activeWidth.value) hitWall = true
               }
             })
+
             if (hitWall) {
               engine.enemyDirection *= -1
+            }
+
+            if (isHorizontal) {
+              enemies.value.forEach((enemy) => {
+                if (!enemy.isHazard) {
+                  enemy.y += 0.2
+                  if (enemy.targetY !== undefined) enemy.targetY += 0.2
+                }
+              })
+            } else if (hitWall) {
               enemies.value.forEach((enemy) => {
                 if (!enemy.isHazard) {
                   enemy.y += 10
@@ -372,6 +388,7 @@ export function useGameLoop(
                 }
               })
             }
+
             if (
               Math.random() < engine.waveEggFireRate &&
               enemies.value.length > 0 &&
@@ -502,10 +519,7 @@ export function useGameLoop(
           enemy.x < -200 ||
           enemy.x > activeWidth.value + 200
         ) {
-          if (gamePhase.value === 'minions' && !enemy.isHazard) {
-            takeDamage()
-            enemies.value.splice(i, 1)
-          } else enemies.value.splice(i, 1)
+          enemies.value.splice(i, 1)
         }
       }
 
@@ -523,45 +537,60 @@ export function useGameLoop(
         const willRotate = boardRotation.value !== nextRot
         waveAnnouncement.value = `WAVE ${nextW}${hiddenEventWavesLeft.value > 0 ? '\n☄️ x2 ĐIỂM ☄️' : ''}`
 
-        if (willRotate) {
-          bullets.value = []
-          enemyBullets.value = []
-          powerUps.value = []
-          activeDots.value = []
-          enemies.value = []
-          isRotating.value = true
-          boardRotation.value = nextRot
-          if (Math.abs(nextRot % 180) === 90) {
-            activeWidth.value = GAME_HEIGHT
-            activeHeight.value = GAME_WIDTH
-          } else {
-            activeWidth.value = GAME_WIDTH
-            activeHeight.value = GAME_HEIGHT
-          }
-          player.value.x = activeWidth.value / 2 - player.value.width / 2
-          player.value.y = activeHeight.value - 90
+        setTimeout(() => {
+          if (willRotate) {
+            bullets.value = []
+            enemyBullets.value = []
+            powerUps.value = []
+            activeDots.value = []
+            enemies.value = []
+            isRotating.value = true
+            boardRotation.value = nextRot
+            if (Math.abs(nextRot % 180) === 90) {
+              activeWidth.value = GAME_HEIGHT
+              activeHeight.value = GAME_WIDTH
+            } else {
+              activeWidth.value = GAME_WIDTH
+              activeHeight.value = GAME_HEIGHT
+            }
+            player.value.x = activeWidth.value / 2 - player.value.width / 2
+            player.value.y = activeHeight.value - 90
 
-          setTimeout(() => {
-            isRotating.value = false
             setTimeout(() => {
-              currentWave.value++
-              startWave(currentWave.value)
-              waveAnnouncement.value = ''
-              engine.isTransitioningWave = false
+              isRotating.value = false
+              setTimeout(() => {
+                currentWave.value++
+                startWave(currentWave.value)
+                waveAnnouncement.value = ''
+                engine.isTransitioningWave = false
+              }, 1000)
             }, 1000)
-          }, 1000)
-        } else {
-          setTimeout(() => {
+          } else {
             currentWave.value++
             startWave(currentWave.value)
             waveAnnouncement.value = ''
             engine.isTransitioningWave = false
-          }, 2000)
-        }
+          }
+        }, 1000)
       }
     } else if (gamePhase.value === 'boss') {
-      bosses.value.forEach((b) => {
-        if (b.hp <= 0) return
+      for (let i = bosses.value.length - 1; i >= 0; i--) {
+        const b = bosses.value[i]
+        if (!b) continue
+
+        if (b.hp <= 0) {
+          if (!b.deathTimer) {
+            b.deathTimer = 1
+            vfx.spawnExplosion(b.x + b.width / 2, b.y + b.height / 2, '#FF6B4A', true)
+          } else {
+            b.deathTimer++
+          }
+          if (b.deathTimer > 120) {
+            bosses.value.splice(i, 1)
+          }
+          continue
+        }
+
         if (checkCollision(b, player.value)) {
           takeDamage()
         }
@@ -570,12 +599,10 @@ export function useGameLoop(
           b.y += 4
         } else if (gameState.value === 'playing') {
           if (b.bossType === 1) {
-            // GÀ TRỐNG THƯỜNG
             b.x += (engine.waveEnemySpeed + 2) * b.direction
             if (b.x <= 0 || b.x + b.width >= activeWidth.value) b.direction *= -1
             b.y = b.targetY! + Math.sin(Date.now() / 300) * 30
             if (Math.random() < engine.waveEggFireRate * 1.5) {
-              // 30% tung chưởng xả 3 trứng tủa ra
               if (Math.random() < 0.3) {
                 ;[-4, 0, 4].forEach((dx) => {
                   enemyBullets.value.push({
@@ -601,7 +628,6 @@ export function useGameLoop(
               }
             }
           } else if (b.bossType === 2) {
-            // UFO
             b.x += engine.waveEnemySpeed * b.direction
             if (b.x <= 0 || b.x + b.width >= activeWidth.value) b.direction *= -1
             if (b.laserTimer !== undefined && b.laserTimer > 0) {
@@ -610,7 +636,6 @@ export function useGameLoop(
               if (b.state === 'idle') {
                 b.state = 'laser_warning'
                 b.laserTimer = 50
-                // 35% tỷ lệ bắn 3 cột Laser kín map
                 if (Math.random() < 0.35) {
                   const cx = b.x + b.width / 2 - 40
                   b.laserXs = [cx - 150, cx, cx + 150]
@@ -624,7 +649,7 @@ export function useGameLoop(
                 b.laserTimer = 15
               } else {
                 b.state = 'idle'
-                b.laserTimer = 100 // Tăng tốc độ xả Laser (giảm delay từ 200 -> 100)
+                b.laserTimer = 100
                 b.laserXs = undefined
               }
             }
@@ -641,7 +666,6 @@ export function useGameLoop(
               })
             }
           } else if (b.bossType === 3) {
-            // MECHA SHIP
             if (b.stateTimer !== undefined) b.stateTimer -= 1
             if (b.stateTimer !== undefined && b.stateTimer <= 0) {
               const r = Math.random()
@@ -723,11 +747,9 @@ export function useGameLoop(
               if (checkCollision(player.value, laserHitbox)) takeDamage()
             }
           } else if (b.bossType === 4) {
-            // GÀ TRỐNG ĐEN (HARD ROOSTER)
             b.x += (engine.waveEnemySpeed + 1) * b.direction
             if (b.x <= 0 || b.x + b.width >= activeWidth.value) b.direction *= -1
             if (Math.random() < engine.waveEggFireRate * 1.5) {
-              // 30% tung chưởng xả 3 thiên thạch nảy tủa ra
               if (Math.random() < 0.3) {
                 ;[-4, 0, 4].forEach((dx) => {
                   enemyBullets.value.push({
@@ -760,7 +782,6 @@ export function useGameLoop(
             b.x += (engine.waveEnemySpeed + 1) * b.direction
             if (b.x <= 0 || b.x + b.width >= activeWidth.value) b.direction *= -1
 
-            // Nếu không đang tụ lực thì thi thoảng mới rớt trứng nhẹ
             if (Math.random() < engine.waveEggFireRate * 1.0 && b.state !== 'circle_burst') {
               enemyBullets.value.push({
                 id: `boss-egg-${engine.objCounter++}`,
@@ -781,14 +802,13 @@ export function useGameLoop(
                   b.laserTimer = 60
                   b.laserX = b.x + b.width / 2 - 40
                 } else {
-                  b.state = 'circle_burst' // Gồng năng lượng nổ Nova 360
+                  b.state = 'circle_burst'
                   b.laserTimer = 40
                 }
               } else if (b.state === 'laser_warning') {
                 b.state = 'laser_firing'
                 b.laserTimer = 15
               } else if (b.state === 'circle_burst') {
-                // TUNG CHƯỞNG MƯA TRỨNG 360 ĐỘ (Nova)
                 const cx = b.x + b.width / 2 - 15
                 const cy = b.y + b.height - 20
                 for (let i = 0; i < 12; i++) {
@@ -821,11 +841,9 @@ export function useGameLoop(
               if (checkCollision(player.value, laserHitbox)) takeDamage()
             }
           } else {
-            // GÀ CHÚA (GIANT CHICKEN)
             b.x += (engine.waveEnemySpeed + 1) * b.direction
             if (b.x <= 0 || b.x + b.width >= activeWidth.value) b.direction *= -1
 
-            // Nếu không đang tụ lực thì thi thoảng mới rớt trứng nhẹ
             if (Math.random() < engine.waveEggFireRate * 1.0 && b.state !== 'circle_burst') {
               enemyBullets.value.push({
                 id: `boss-egg-${engine.objCounter++}`,
@@ -863,7 +881,7 @@ export function useGameLoop(
             }
           }
         }
-      })
+      }
 
       for (let bIndex = bullets.value.length - 1; bIndex >= 0; bIndex--) {
         const bullet = bullets.value[bIndex]
@@ -902,9 +920,13 @@ export function useGameLoop(
         }
       }
 
-      const allBossesDead = bosses.value.length > 0 && bosses.value.every((b) => b.hp <= 0)
+      const allBossesDead =
+        gamePhase.value === 'boss' &&
+        engine.hasSpawnedBoss &&
+        bosses.value.length === 0 &&
+        !engine.isTransitioningWave
 
-      if (allBossesDead && !engine.isTransitioningWave) {
+      if (allBossesDead) {
         sfx.explode()
         engine.isTransitioningWave = true
         addScore(1000 * ptMult)
@@ -913,41 +935,41 @@ export function useGameLoop(
         const willRotate = boardRotation.value !== nextRot
         waveAnnouncement.value = `WAVE ${nextW}${hiddenEventWavesLeft.value > 0 ? '\n☄️ x2 ĐIỂM ☄️' : ''}`
 
-        if (willRotate) {
-          bullets.value = []
-          enemyBullets.value = []
-          powerUps.value = []
-          activeDots.value = []
-          enemies.value = []
-          isRotating.value = true
-          boardRotation.value = nextRot
-          if (Math.abs(nextRot % 180) === 90) {
-            activeWidth.value = GAME_HEIGHT
-            activeHeight.value = GAME_WIDTH
-          } else {
-            activeWidth.value = GAME_WIDTH
-            activeHeight.value = GAME_HEIGHT
-          }
-          player.value.x = activeWidth.value / 2 - player.value.width / 2
-          player.value.y = activeHeight.value - 90
+        setTimeout(() => {
+          if (willRotate) {
+            bullets.value = []
+            enemyBullets.value = []
+            powerUps.value = []
+            activeDots.value = []
+            enemies.value = []
+            isRotating.value = true
+            boardRotation.value = nextRot
+            if (Math.abs(nextRot % 180) === 90) {
+              activeWidth.value = GAME_HEIGHT
+              activeHeight.value = GAME_WIDTH
+            } else {
+              activeWidth.value = GAME_WIDTH
+              activeHeight.value = GAME_HEIGHT
+            }
+            player.value.x = activeWidth.value / 2 - player.value.width / 2
+            player.value.y = activeHeight.value - 90
 
-          setTimeout(() => {
-            isRotating.value = false
             setTimeout(() => {
-              currentWave.value++
-              startWave(currentWave.value)
-              waveAnnouncement.value = ''
-              engine.isTransitioningWave = false
+              isRotating.value = false
+              setTimeout(() => {
+                currentWave.value++
+                startWave(currentWave.value)
+                waveAnnouncement.value = ''
+                engine.isTransitioningWave = false
+              }, 1000)
             }, 1000)
-          }, 1000)
-        } else {
-          setTimeout(() => {
+          } else {
             currentWave.value++
             startWave(currentWave.value)
             waveAnnouncement.value = ''
             engine.isTransitioningWave = false
-          }, 2000)
-        }
+          }
+        }, 1000)
       }
     }
     animationFrameId = requestAnimationFrame(gameLoop)

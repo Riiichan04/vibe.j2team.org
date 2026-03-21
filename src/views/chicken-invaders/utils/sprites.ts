@@ -32,14 +32,35 @@ export const SPRITES = {
   bossMecha: `<svg viewBox="0 0 64 64" class="w-full h-full drop-shadow-[0_0_20px_rgba(225,29,72,0.8)]"><path d="M 32 16 L 60 8 L 48 36 L 32 60 L 16 36 L 4 8 Z" fill="#334155" stroke="#94a3b8" stroke-width="2" stroke-linejoin="round"/><circle cx="32" cy="32" r="12" fill="#be123c" stroke="#f43f5e" stroke-width="2"/><circle cx="32" cy="32" r="6" fill="#fecdd3"/><path d="M 32 60 L 28 48 L 36 48 Z" fill="#94a3b8"/></svg>`,
 
   // Boss 5: Mega chicken
-  megaBoss: `<svg viewBox="0 0 64 64" class="w-full h-full drop-shadow-[0_0_25px_rgba(255,215,0,0.9)]">
-      <path d="M 32 10 C 15 10 10 25 10 40 C 10 55 22 60 32 60 C 42 60 54 55 54 40 C 54 25 49 10 32 10" fill="#FFD700" stroke="#B8860B" stroke-width="3"/>
-      <circle cx="22" cy="30" r="5" fill="white"/><circle cx="22" cy="30" r="2" fill="black"/>
-      <circle cx="42" cy="30" r="5" fill="white"/><circle cx="42" cy="30" r="2" fill="black"/>
-      <path d="M 28 42 Q 32 50 36 42" fill="none" stroke="#FF4500" stroke-width="3" stroke-linecap="round"/>
-      <path d="M 10 35 Q 0 30 10 25 M 54 35 Q 64 30 54 25" fill="none" stroke="#FFD700" stroke-width="4"/>
-      <path d="M 32 5 L 32 15 M 25 7 L 29 15 M 39 7 L 35 15" stroke="#FF4500" stroke-width="3" stroke-linecap="round"/>
-    </svg>`,
+  megaBoss: `
+  <svg viewBox="0 0 64 64" class="w-full h-full drop-shadow-[0_0_20px_rgba(250,204,21,0.8)]">
+    <defs>
+      <linearGradient id="boss5Grad" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#FEF08A" />
+        <stop offset="40%" stop-color="#EAB308" />
+        <stop offset="100%" stop-color="#A16207" />
+      </linearGradient>
+      <linearGradient id="boss5Fire" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#EF4444" />
+        <stop offset="100%" stop-color="#7F1D1D" />
+      </linearGradient>
+    </defs>
+    
+    <path d="M 14 30 L 2 18 L 8 36 L 4 48 L 14 42" fill="url(#boss5Grad)" stroke="#713F12" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M 50 30 L 62 18 L 56 36 L 60 48 L 50 42" fill="url(#boss5Grad)" stroke="#713F12" stroke-width="2" stroke-linejoin="round"/>
+    
+    <path d="M 22 14 L 16 2 L 28 8 L 32 0 L 36 8 L 48 2 L 42 14 Z" fill="url(#boss5Fire)" stroke="#450A0A" stroke-width="2" stroke-linejoin="round"/>
+    
+    <path d="M 32 12 C 12 12 8 28 10 46 C 12 58 22 62 32 62 C 42 62 52 58 54 46 C 56 28 52 12 32 12 Z" fill="url(#boss5Grad)" stroke="#713F12" stroke-width="3"/>
+    
+    <path d="M 12 24 L 28 32 L 18 36 Z" fill="#171717" stroke="#000" stroke-width="1"/>
+    <path d="M 52 24 L 36 32 L 46 36 Z" fill="#171717" stroke="#000" stroke-width="1"/>
+    <circle cx="22" cy="31" r="2.5" fill="#EF4444" filter="drop-shadow(0 0 2px #EF4444)"/>
+    <circle cx="42" cy="31" r="2.5" fill="#EF4444" filter="drop-shadow(0 0 2px #EF4444)"/>
+    
+    <path d="M 32 34 L 40 42 L 32 50 L 24 42 Z" fill="#EA580C" stroke="#7C2D12" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M 26 42 Q 32 46 38 42" fill="none" stroke="#431407" stroke-width="2"/>
+  </svg>`,
 
   // Thiên thạch
   meteor: `<svg viewBox="0 0 64 64" class="w-full h-full drop-shadow-[0_0_10px_rgba(234,88,12,0.5)]"><path d="M 20 10 C 36 4 50 14 56 28 C 60 40 48 56 32 58 C 16 60 6 46 8 30 C 8 16 14 12 20 10 Z" fill="#78350f" stroke="#ea580c" stroke-width="2" stroke-linejoin="round"/><circle cx="24" cy="24" r="4" fill="#451a03" opacity="0.8"/><circle cx="42" cy="38" r="6" fill="#451a03" opacity="0.8"/><circle cx="28" cy="46" r="3" fill="#451a03" opacity="0.8"/><circle cx="46" cy="20" r="2" fill="#451a03" opacity="0.6"/></svg>`,

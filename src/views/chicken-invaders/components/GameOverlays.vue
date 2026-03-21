@@ -2,8 +2,23 @@
 import { ref, computed, inject } from 'vue'
 import type { GameContext } from '../composables/useGame'
 
-const { gameState, initGame, score, resumingCountdown, waveAnnouncement, difficulty, resumeGame } =
-  inject('game') as GameContext
+const {
+  gameState,
+  previousGameState,
+  initGame,
+  score,
+  resumingCountdown,
+  waveAnnouncement,
+  difficulty,
+  resumeGame,
+  saves,
+  saveCurrentGame,
+  loadGame,
+  deleteSave,
+  exportSaves,
+  importSaves, // <-- Lấy hàm importSaves từ context
+  notification,
+} = inject('game') as GameContext
 
 const diffOptions = [
   {
@@ -59,12 +74,29 @@ const handlePlay = () => {
   initGame()
 }
 
-// Biến trạng thái để hiển thị Popup xác nhận thoát
-const showExitConfirm = ref(false)
+const openSavesMenu = () => {
+  previousGameState.value = gameState.value
+  gameState.value = 'saves'
+}
 
+const showExitConfirm = ref(false)
 const confirmExit = () => {
   showExitConfirm.value = false
   gameState.value = 'menu'
+}
+
+const saveToDelete = ref<string | null>(null)
+const confirmDeleteSave = () => {
+  if (saveToDelete.value) {
+    deleteSave(saveToDelete.value)
+    saveToDelete.value = null
+  }
+}
+
+// Logic kích hoạt nạp file
+const fileInput = ref<HTMLInputElement | null>(null)
+const triggerImport = () => {
+  fileInput.value?.click()
 }
 </script>
 
@@ -123,6 +155,13 @@ const confirmExit = () => {
           &gt;
         </button>
       </div>
+
+      <button
+        @click="openSavesMenu"
+        class="w-full py-3 border border-border-default bg-bg-elevated hover:border-accent-amber text-text-primary font-display font-bold transition-all mb-4"
+      >
+        TẢI GAME / QUẢN LÝ LƯU TRỮ
+      </button>
 
       <div
         class="bg-bg-elevated p-4 border border-border-default min-h-28 flex items-center justify-center text-left"
@@ -206,6 +245,13 @@ const confirmExit = () => {
       </button>
 
       <button
+        @click="openSavesMenu"
+        class="px-8 py-4 bg-accent-amber text-bg-deep font-display font-bold text-xl transition-all hover:bg-white active:scale-95 shadow-lg cursor-pointer"
+      >
+        LƯU GAME / TẢI GAME
+      </button>
+
+      <button
         @click="showExitConfirm = true"
         class="px-8 py-4 bg-accent-coral border border-border-default text-bg-deep font-display font-bold text-xl transition-all hover:bg-white active:scale-95 cursor-pointer"
       >
@@ -219,7 +265,7 @@ const confirmExit = () => {
 
     <div
       v-if="showExitConfirm"
-      class="fixed inset-0 z-700 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+      class="fixed inset-0 z-700 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 pointer-events-auto"
     >
       <div
         class="bg-bg-surface border-2 border-accent-coral p-8 max-w-sm w-full text-center shadow-[0_0_30px_rgba(255,107,74,0.3)] scale-in-center"
@@ -230,7 +276,7 @@ const confirmExit = () => {
           Xác nhận thoát?
         </h3>
         <p class="text-text-secondary mb-8 leading-relaxed">
-          Tiến trình chơi hiện tại của bạn sẽ bị mất hoàn toàn!
+          Tiến trình chơi hiện tại của bạn sẽ bị mất hoàn toàn nếu chưa Lưu Game!
         </p>
 
         <div class="grid grid-cols-2 gap-4">
@@ -245,6 +291,126 @@ const confirmExit = () => {
             class="font-display py-3 bg-accent-coral text-bg-deep font-bold hover:brightness-110 transition-all cursor-pointer"
           >
             THOÁT
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div
+    v-if="gameState === 'saves'"
+    class="absolute inset-0 bg-bg-deep/95 backdrop-blur-md z-600 flex flex-col items-center justify-center pointer-events-auto p-4"
+  >
+    <h2
+      class="text-3xl md:text-5xl font-display font-bold text-accent-sky mb-6 drop-shadow-[0_0_10px_#38BDF8]"
+    >
+      QUẢN LÝ LƯU TRỮ
+    </h2>
+
+    <div
+      class="w-full max-w-2xl bg-bg-surface border border-border-default p-4 flex flex-col gap-3 max-h-[50vh] overflow-y-auto mb-6"
+    >
+      <div
+        v-if="saves.length === 0"
+        class="text-text-secondary font-bold text-center py-10 tracking-widest"
+      >
+        CHƯA CÓ DỮ LIỆU ĐƯỢC LƯU
+      </div>
+
+      <div
+        v-for="save in saves"
+        :key="save.id"
+        class="p-4 border border-border-default bg-bg-elevated flex flex-col md:flex-row md:justify-between md:items-center gap-4 transition-colors hover:border-accent-sky"
+      >
+        <div class="flex flex-col">
+          <span class="text-accent-amber font-bold font-display text-xl uppercase tracking-wider">{{
+            save.name
+          }}</span>
+          <span class="text-sm text-text-secondary font-semibold mt-1">
+            ĐIỂM: {{ save.score.toLocaleString() }} | MẠNG: {{ save.lives }}
+          </span>
+          <span class="text-xs text-text-dim mt-0.5">{{
+            new Date(save.date).toLocaleString()
+          }}</span>
+        </div>
+        <div class="flex gap-2 shrink-0">
+          <button
+            @click="loadGame(save)"
+            class="px-5 py-2 bg-accent-sky text-bg-deep font-bold font-display hover:bg-white transition-colors cursor-pointer rounded-sm"
+          >
+            TẢI
+          </button>
+          <button
+            @click="saveToDelete = save.id"
+            class="px-5 py-2 bg-accent-coral text-bg-deep font-bold font-display hover:bg-white transition-colors cursor-pointer rounded-sm"
+          >
+            XÓA
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-center gap-4 w-full max-w-2xl">
+      <button
+        v-if="previousGameState === 'paused'"
+        @click="saveCurrentGame"
+        class="px-6 py-4 bg-accent-amber text-bg-deep font-bold font-display hover:bg-white transition-colors cursor-pointer rounded-sm shrink-0 shadow-lg"
+      >
+        + LƯU GAME HIỆN TẠI
+      </button>
+
+      <button
+        @click="triggerImport"
+        class="px-6 py-4 bg-bg-elevated border border-border-default text-text-primary font-bold font-display hover:border-accent-sky hover:text-accent-sky transition-colors cursor-pointer rounded-sm shrink-0"
+      >
+        📤 NẠP FILE (.JSON)
+      </button>
+
+      <input type="file" ref="fileInput" accept=".json" class="hidden" @change="importSaves" />
+
+      <button
+        @click="exportSaves"
+        class="px-6 py-4 bg-bg-elevated border border-border-default text-text-primary font-bold font-display hover:border-accent-amber transition-colors cursor-pointer rounded-sm shrink-0"
+      >
+        📥 XUẤT FILE (.JSON)
+      </button>
+
+      <button
+        @click="gameState = previousGameState"
+        class="px-6 py-4 bg-bg-surface border border-border-default text-text-secondary font-bold font-display hover:text-white transition-colors cursor-pointer rounded-sm shrink-0"
+      >
+        QUAY LẠI CỬA SỔ
+      </button>
+    </div>
+
+    <div
+      v-if="saveToDelete"
+      class="fixed inset-0 z-700 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 pointer-events-auto"
+    >
+      <div
+        class="bg-bg-surface border-2 border-accent-coral p-8 max-w-sm w-full text-center shadow-[0_0_30px_rgba(255,107,74,0.3)] scale-in-center"
+      >
+        <h3
+          class="text-2xl font-display font-bold text-text-primary mb-4 uppercase tracking-tighter"
+        >
+          Xác nhận xoá?
+        </h3>
+        <p class="text-text-secondary mb-8 leading-relaxed">
+          Bản lưu này sẽ bị xoá vĩnh viễn và không thể khôi phục!
+        </p>
+
+        <div class="grid grid-cols-2 gap-4">
+          <button
+            @click="saveToDelete = null"
+            class="font-display py-3 bg-bg-elevated border border-border-default text-text-primary font-bold hover:bg-bg-surface transition-colors cursor-pointer rounded-sm"
+          >
+            HUỶ BỎ
+          </button>
+          <button
+            @click="confirmDeleteSave"
+            class="font-display py-3 bg-accent-coral text-bg-deep font-bold hover:brightness-110 transition-all cursor-pointer rounded-sm"
+          >
+            XOÁ LUÔN
           </button>
         </div>
       </div>
@@ -271,6 +437,13 @@ const confirmExit = () => {
     >
       {{ waveAnnouncement }}
     </h2>
+  </div>
+
+  <div
+    v-if="notification"
+    class="fixed top-8 left-1/2 -translate-x-1/2 bg-bg-surface border-2 border-accent-sky text-accent-sky px-8 py-4 font-display font-bold text-lg sm:text-xl rounded-sm shadow-[0_0_20px_#38BDF8] z-9999 pointer-events-none scale-in-center uppercase tracking-widest"
+  >
+    {{ notification }}
   </div>
 </template>
 

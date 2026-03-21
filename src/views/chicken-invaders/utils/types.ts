@@ -44,6 +44,7 @@ export interface Boss extends Enemy {
   laserTimer?: number
   laserX?: number
   laserXs?: number[] // Hỗ trợ bắn nhiều tia laser cùng lúc
+  deathTimer?: number // Timer chờ khi boss nổ trước khi xóa hẳn
 }
 
 export interface Egg extends GameObject {
@@ -71,4 +72,16 @@ export interface LeaderboardEntry {
   wave: number
   difficulty: string
   date: number
+}
+
+export interface SaveSlot {
+  id: string
+  name: string
+  date: number
+  score: number
+  lives: number
+  currentWave: number
+  weaponType: number
+  weaponLevel: number
+  difficulty: 'easy' | 'normal' | 'hard' | 'hardcore'
 }
